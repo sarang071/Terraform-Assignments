@@ -90,16 +90,34 @@ resource "aws_key_pair" "this_key" {
   public_key = file(var.ssh_key_path)
 }
 #==================================================================
-//Application Load Balancer
+//RDS
 #==================================================================
-resource "aws_lb" "test" {
-  name               = "test-lb-tf"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb-sg.id]
-  subnets            = [aws_subnet.public_subnet[0].id, aws_subnet.public_subnet[1].id]
-  enable_deletion_protection = false
+resource "aws_db_security_group" "rds-sg" {
+  name = "rds_sg"
+
+  ingress {
+    cidr = ["10.0.2.0/24"]
+  }
 }
+resource "aws_db_subnet_group" "rds-subnet-group" {
+  name       = "rds-subnet-group"
+  subnet_ids = [aws_subnet.private_subnet[0].id, aws_subnet.private_subnet[1].id]
+}
+resource "aws_db_instance" "ce-rds" {
+  allocated_storage      = 10
+  db_name                = "mydb"
+  engine                 = "mysql"
+  engine_version         = "5.7"
+  instance_class         = "db.t3.medium"
+  username               = "sarang"
+  password               = "foobarbaz"
+  parameter_group_name   = "default.mysql5.7"
+  publicly_accessible    = false
+  skip_final_snapshot    = true
+  vpc_security_group_ids = [aws_db_security_group.rds-sg.id]
+  db_subnet_group_name   = aws_db_subnet_group.rds-subnet-group.name
+}
+
 #==================================================================
 // AMI Image
 #==================================================================
@@ -125,46 +143,23 @@ data "aws_ami" "dev_ami_image" {
 #==================================================================
 // EC2
 #==================================================================
-resource "aws_instance" "this_ec2" {
+resource "aws_instance" "app_ec2" {
   ami                     = data.aws_ami.dev_ami_image.id
   instance_type           = "t2.micro"
   key_name                = aws_key_pair.this_key.key_name
   subnet_id               = aws_subnet.public_subnet[1].id
-  security_groups         = [aws_security_group.web-sg.id]
+  security_groups         = [aws_security_group.app-sg.id]
 }
 #==================================================================
 // Security Groups
 #==================================================================
-resource "aws_security_group" "alb-sg" {
-  name        = "alb-sg"
-  description = "Allow 80 and 443"
+resource "aws_security_group" "app-sg" {
+  name        = "app-sg"
+  description = "Allow 8080 and 22"
   vpc_id      = aws_vpc.CE-vpc.id
 
   dynamic "ingress" {
-    for_each = var.alb-sg-basic
-    iterator = port
-    content {
-      from_port       = port.value
-      to_port         = port.value
-      protocol        = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-resource "aws_security_group" "web-sg" {
-  name        = "web-sg"
-  description = "Allow 22, 80"
-  vpc_id      = aws_vpc.CE-vpc.id
-
-  dynamic "ingress" {
-    for_each = var.web-sg-basic
+    for_each = var.app-sg-basic
     iterator = port
     content {
       from_port       = port.value

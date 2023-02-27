@@ -28,9 +28,9 @@ variable "zones" {
 #==================================================================
 // Security Groups
 #==================================================================
-variable "alb-sg-basic" {
+variable "app-sg-basic" {
   type = list(any)
 }
-variable "web-sg-basic" {
+variable "rds-sg-basic" {
   type = list(any)
 }
